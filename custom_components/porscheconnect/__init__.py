@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.helpers.httpx_client import create_async_httpx_client
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -77,7 +77,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     if hass.data.get(DOMAIN) is None:
         hass.data.setdefault(DOMAIN, {})
 
-    async_client = get_async_client(hass)
+    # HA 2026.11's httpx2 client advertises zstd, and Porsche's API then sends
+    # bodies labelled zstd that aren't valid zstd frames (upstream #398/#453).
+    # Use one dedicated client that only offers gzip/deflate, reused across
+    # setup retries and reloads instead of creating a new one each time.
+    async_client = hass.data.get(f"{DOMAIN}_httpx_client")
+    if async_client is None:
+        async_client = create_async_httpx_client(
+            hass, headers={"Accept-Encoding": "gzip, deflate"}
+        )
+        hass.data[f"{DOMAIN}_httpx_client"] = async_client
     connection = Connection(
         entry.data.get("email"),
         entry.data.get("password"),
