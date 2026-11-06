@@ -77,15 +77,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     if hass.data.get(DOMAIN) is None:
         hass.data.setdefault(DOMAIN, {})
 
-    # HA 2026.11's httpx2 client advertises zstd, and Porsche's API then sends
-    # bodies labelled zstd that aren't valid zstd frames (upstream #398/#453).
-    # Use one dedicated client that only offers gzip/deflate, reused across
-    # setup retries and reloads instead of creating a new one each time.
+    # The Porsche API returns zstd bodies that httpx2 (HA 2026.11+) cannot decode,
+    # so use a dedicated client that does not advertise zstd. The header is set on
+    # the client because create_async_httpx_client only merges headers= since 2026.2.
     async_client = hass.data.get(f"{DOMAIN}_httpx_client")
     if async_client is None:
-        async_client = create_async_httpx_client(
-            hass, headers={"Accept-Encoding": "gzip, deflate"}
-        )
+        async_client = create_async_httpx_client(hass)
+        async_client.headers["Accept-Encoding"] = "gzip, deflate"
+        # Reuse one client so reloads and setup retries don't create new ones.
         hass.data[f"{DOMAIN}_httpx_client"] = async_client
     connection = Connection(
         entry.data.get("email"),
