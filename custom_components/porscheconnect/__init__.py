@@ -80,11 +80,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # The Porsche API returns zstd bodies that httpx2 (HA 2026.11+) cannot decode,
     # so use a dedicated client that does not advertise zstd. The header is set on
     # the client because create_async_httpx_client only merges headers= since 2026.2.
+    # It is reused across setup retries and reloads: HA only closes it at shutdown.
     async_client = hass.data.get(f"{DOMAIN}_httpx_client")
     if async_client is None:
         async_client = create_async_httpx_client(hass)
         async_client.headers["Accept-Encoding"] = "gzip, deflate"
-        # Reuse one client so reloads and setup retries don't create new ones.
         hass.data[f"{DOMAIN}_httpx_client"] = async_client
     connection = Connection(
         entry.data.get("email"),
